@@ -43,6 +43,11 @@ SAMPLES         = 10
 # Sensor measures round-trip time, so we divide by 2 to get half of that distance
 SPEED = 17050
 
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(TRIG ,GPIO.OUT)
+GPIO.setup(ECHO,GPIO.IN)
+GPIO.output(TRIG, False)
+
 ############## LETS Start ##############
 
    
@@ -51,11 +56,6 @@ print('{time}, Starting... '.format(
 ))
 
 while True:
-
-    GPIO.setmode(GPIO.BCM)
-    GPIO.setup(TRIG ,GPIO.OUT)
-    GPIO.setup(ECHO,GPIO.IN)
-    GPIO.output(TRIG, False)
 
     distances = []
     sampleCount = 0
@@ -93,8 +93,7 @@ while True:
             distance    = pulse_time * SPEED
         ))
 
-    # Cleanup (set GPIOs to input, etc.)
-    GPIO.cleanup()
+
     # Print date/time and median measurment in cm.
     distance = round( statistics.median(distances), 1)
 
