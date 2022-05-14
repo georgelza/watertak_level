@@ -1,0 +1,3 @@
+scp level.py pi@172.16.20.216:/home/pi/watertank/level.py
+scp config.cfg pi@172.16.20.216:/home/pi/watertank/config.cfg
+scp run.bsh pi@172.16.20.216:/home/pi/watertank/run.bsh
