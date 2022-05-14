@@ -1,9 +1,9 @@
-# watertak_level
+# Watertank level
 
-Python code to read ultronic sensor, measuring water level in a tank,
+Python code to read Ultrasonic sensor (HC-SR04), measuring water level (distance) in a tank,
 
-Converting the distance into a tank filled percentage,
+Converting the distance into a percentage of the tank filled.
 
-Converting the percentage into a water volume based on tank capacity
+Converting the percentage into a water volume based on tank capacity.
 
-Inserting all values into a InfluxDB (hosted on bolix), visualized via Grafana.
+Inserting all values into a InfluxDB (hosted on Oblix), to be visualized via Grafana dashboard.

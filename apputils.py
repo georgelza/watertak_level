@@ -17,7 +17,7 @@
 __author__      = "George Leonard"
 __email__       = "georgelza@gmail.com"
 __version__     = "0.0.1"
-__copyright__   = "Copyright 2020, George Leonard"
+__copyright__   = "Copyright 2022, George Leonard"
 
 import configparser
 

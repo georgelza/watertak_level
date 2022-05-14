@@ -18,6 +18,7 @@
 __author__      = "George Leonard"
 __email__       = "georgelza@gmail.com"
 __version__     = "0.0.1"
+__copyright__   = "Copyright 2022, George Leonard"
 
 
 import RPi.GPIO as GPIO
@@ -69,9 +70,6 @@ db["dbname"]            = config_params['influxdb']['dbname']
 
 
 ############## LETS Start ##############
-
-
-
 
 
 def db_influx_connect(db):
@@ -149,111 +147,131 @@ def insertInflux(client, json_data):
 
 def main(db):
 
-    influx_client = db_influx_connect(db)
+    try: 
+        # Create the InfluxDB connection
+        influx_client = db_influx_connect(db)
 
-    ######## Temporary ########
-    TEST_EXECUTED = 0
-    TEST_COUNT = 5000
+        ######## Temporary ########
+        TEST_EXECUTED = 0
+        TEST_COUNT = 5000
 
-    while True:
+        while True:
 
-        distances = []
-        sampleCount = 0
-        while sampleCount < SAMPLES:
-            # Distance Measurement In Progress
+            distances = []
+            sampleCount = 0
+            while sampleCount < SAMPLES:
+                # Distance Measurement In Progress
 
-            # Limit sample rate to every 10ms (even though spec recommends 60ms)
-            time.sleep(0.06)
+                # Limit sample rate to every 10ms (even though spec recommends 60ms)
+                time.sleep(0.06)
 
-            # Send 10uS pulse
-            GPIO.output(TRIG, True)
-            time.sleep(0.00001)
-            GPIO.output(TRIG, False)
+                # Send 10uS pulse
+                GPIO.output(TRIG, True)
+                time.sleep(0.00001)
+                GPIO.output(TRIG, False)
 
-            # Waiting for ECHO to go high...
-            # Max. wait 1 second using pulse_end as temp variable
-            pulse_start = time.time()
-            pulse_end = time.time()
-            while GPIO.input(ECHO)==0 and pulse_start - pulse_end < 1:
+                # Waiting for ECHO to go high...
+                # Max. wait 1 second using pulse_end as temp variable
                 pulse_start = time.time()
-
-            # Waiting for ECHO to go low... (max. wait 1 second)
-            pulse_end = time.time()
-            while GPIO.input(ECHO)==1 and pulse_end - pulse_start < 1:
                 pulse_end = time.time()
+                while GPIO.input(ECHO)==0 and pulse_start - pulse_end < 1:
+                    pulse_start = time.time()
 
-            # Append distance measurement to samples array
-            pulse_time = pulse_end - pulse_start
-            distances.append(pulse_time * SPEED)
-            sampleCount = sampleCount + 1
+                # Waiting for ECHO to go low... (max. wait 1 second)
+                pulse_end = time.time()
+                while GPIO.input(ECHO)==1 and pulse_end - pulse_start < 1:
+                    pulse_end = time.time()
+
+                # Append distance measurement to samples array
+                pulse_time = pulse_end - pulse_start
+                distances.append(pulse_time * SPEED)
+                sampleCount = sampleCount + 1
+
+                if DEBUGLEVEL > 1:
+
+                    print('{time}, pulse_time: {pulse_time}, distance: {distance} '.format(
+                        time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
+                        pulse_time  = pulse_time,
+                        distance    = pulse_time * SPEED
+                    ))
+
+            # Print date/time and median measurment in cm.
+            distance = round( statistics.median(distances), 1)
+
+            if distance > EMPTY_DISTANCE:
+                distance = EMPTY_DISTANCE
+
+            # Percentage filled
+            percentage = 100-((distance * 100)/EMPTY_DISTANCE)
+            percentage = round(percentage, 2)
+            percentage = percentage
+
+            tTimestamp  = time.strftime('%Y-%m-%dT%H:%M:%SZ',time.localtime(time.time()))
+            tLevel      = round(distance, 2)
+            tPercentage = round(100-percentage, 2)
+            tVolume     = TANK_CAPACITY - ((1-(distance/EMPTY_DISTANCE))*TANK_CAPACITY)
+
+            # select * from "Water-Tank-Levels"
+            # select * from "Water-Tank-Levels" where tag ="Council-Tank-Left"
+            json_data = [{
+                "measurement" : MEASUREMENT,        # select from 
+                    "tags": {                       # where tank = ""
+                        "tank": TAG
+                    },
+                    "time" : tTimestamp,
+                    "fields": {
+                        "water_level":      tLevel,             # cm of water in tank
+                        "fill_percentage":  tPercentage,        # based on distance and tank depth, percentage full
+                        "water_volume":     tVolume,            # based on percentage and tank capacity
+                    }
+                }
+            ]
+
+            if DEBUGLEVEL > 0:
+                print('{time}, Measurement: {measurement}, Tag: {tag}, H2O Level : {level} cm, Fill Percentage: {percentage}%, Liters in Tank {volume} L '.format(
+                    time=tTimestamp,
+                    measurement= MEASUREMENT,
+                    tag=TAG,
+                    level = tLevel,
+                    percentage = tPercentage,
+                    volume = tVolume
+                ))
 
             if DEBUGLEVEL > 1:
 
-                print('{time}, pulse_time: {pulse_time}, distance: {distance} '.format(
-                    time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
-                    pulse_time  = pulse_time,
-                    distance    = pulse_time * SPEED
-                ))
+                print("")
+                json_formatted_str = json.dumps(json_data, indent=2)
+                print(json_formatted_str)
+        
 
-        # Print date/time and median measurment in cm.
-        distance = round( statistics.median(distances), 1)
+            ########################################################################
+            # Insert into InfluxDB Database
+            insertInflux(influx_client, json_data)
 
-        if distance > EMPTY_DISTANCE:
-            distance = EMPTY_DISTANCE
+            time.sleep(SLEEP_SECONDS)
 
-        # Percentage filled
-        percentage = 100-((distance * 100)/EMPTY_DISTANCE)
-        percentage = round(percentage, 2)
-        percentage = percentage
+            # Temporary
+            if TEST_EXECUTED +1 == TEST_COUNT :
+                influx_client.close()
+                sys.exit(1)
 
-        tTimestamp  = time.strftime('%Y-%m-%dT%H:%M:%SZ',time.localtime(time.time()))
-        tLevel      = round(distance, 2)
-        tPercentage = round(100-percentage, 2)
-        tVolume     = TANK_CAPACITY - ((1-(distance/EMPTY_DISTANCE))*TANK_CAPACITY)
+            TEST_EXECUTED = TEST_EXECUTED + 1
 
-        # select * from "Water-Tank-Levels"
-        # select * from "Water-Tank-Levels" where tag ="Council-Tank-Left"
-        json_data = [{
-            "measurement" : MEASUREMENT,        # select from 
-                "tags": {                       # where tank = ""
-                    "tank": TAG
-                },
-                "time" : tTimestamp,
-                "fields": {
-                    "water_level":      tLevel,             # cm of water in tank
-                    "fill_percentage":  tPercentage,        # based on distance and tank depth, percentage full
-                    "water_volume":     tVolume,            # based on percentage and tank capacity
-                }
-            }
-        ]
+    except Exception as err:
 
-        if DEBUGLEVEL > 0:
-            print('{time}, Measurement: {measurement}, Tag: {tag}, H2O Level : {level} cm, Fill Percentage: {percentage}%, Liters in Tank {volume} L '.format(
-                time=tTimestamp,
-                measurement= MEASUREMENT,
-                tag=TAG,
-                level = tLevel,
-                percentage = tPercentage,
-                volume = tVolume
-            ))
+        print("")
+        print('{time}, Soemthing went wrong / Error... {err}'.format(
+            time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
+            err=err
+        ))
 
-        if DEBUGLEVEL > 1:
+    finally:
 
-            print("")
-            json_formatted_str = json.dumps(json_data, indent=2)
-            print(json_formatted_str)
-    
-
-        ########################################################################
-        # Insert into InfluxDB Database
-        insertInflux(influx_client, json_data)
-
-        time.sleep(SLEEP_SECONDS)
-
-        # Temporary
-        if TEST_EXECUTED +1 == TEST_COUNT :
-            sys.exit(1)
-        TEST_EXECUTED = TEST_EXECUTED + 1
+        print("")
+        print('{time}, Closing DB Connection... '.format(
+            time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
+        ))
+        influx_client.close()
 
 # end main 
 
@@ -266,6 +284,7 @@ if __name__ == '__main__':
     ))
 
     main(db)
+
 # end def
 
 
