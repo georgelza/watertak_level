@@ -259,19 +259,30 @@ def main(db):
 
     except Exception as err:
 
-        print("")
         print('{time}, Soemthing went wrong / Error... {err}'.format(
             time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
             err=err
         ))
+  
+    except KeyboardInterrupt:
+
+        print('{time}, Shutting Down Unexpectedly...'.format(
+            time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
+        ))
+
+        sys.stdout.flush()
+        sys.exit(-1)
 
     finally:
 
-        print("")
         print('{time}, Closing DB Connection... '.format(
             time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         ))
         influx_client.close()
+
+        print('{time}, Goodbye... '.format(
+            time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
+        ))
 
 # end main 
 
