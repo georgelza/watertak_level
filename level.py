@@ -11,6 +11,8 @@
 #
 #   Notes       	:   Change InfluxDB time display mode   precision rfc3339
 #
+#   git url         :   https://github.com/georgelza/watertak_level
+#
 #######################################################################################################################
 
 __author__      = "George Leonard"
