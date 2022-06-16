@@ -1,0 +1,12 @@
+[Unit]
+Description=My Water Tank Level Service (Council)
+After=multi-user.target
+
+[Service]
+Type=idle
+User=pi
+Group=pi
+ExecStart=/home/pi/watertank/run.bsh > 2>&1 > /home/pi/watertank/council.log
+
+[Install]
+WantedBy=multi-user.target

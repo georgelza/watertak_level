@@ -1,0 +1,41 @@
+entities:
+  - entity: sensor.councilwatertank1_percentagefilled
+    name: Filled %
+type: picture-glance
+entity: sensor.councilwatertank1_card
+state_image:
+  empty: /local/(name of your empty image).jpg
+  20: /local/(name of your image where water is between 10-19%).jpg
+  30: /local/(name of your image where water is between 20-29%).jpg
+  40: /local/...
+  50: /local/...
+  60: 
+  70:
+  80:
+  90:
+  Full:
+  
+  - platform: template
+    councilwatertank1_card:
+      value_template: >-
+        {% if states.sensor.councilwatertank1_percentagefilled | float <10 %}
+         empty
+        {% elif states.sensor.councilwatertank1_percentagefilled | float <20 %}
+         20
+        {% elif states.sensor.councilwatertank1_percentagefilled | float <30 %}
+         30
+        {% elif states.sensor.councilwatertank1_percentagefilled | float <40 %}
+         40
+        {% elif states.sensor.councilwatertank1_percentagefilled | float <50 %}
+         50
+        {% elif states.sensor.councilwatertank1_percentagefilled | float <60 %}
+         60
+        {% elif states.sensor.councilwatertank1_percentagefilled | float <70 %}
+         70
+        {% elif states.sensor.councilwatertank1_percentagefilled | float <80 %}
+         80
+        {% elif states.sensor.councilwatertank1_percentagefilled | float <90 %}
+         90
+        {% elif states.sensor.councilwatertank1_percentagefilled | float <100 %}
+         Full
+        {% endif %}

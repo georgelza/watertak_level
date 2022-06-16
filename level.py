@@ -13,6 +13,26 @@
 #
 #   git url         :   https://github.com/georgelza/watertak_level
 #
+#
+#					:	select * from WaterTankLevels where ("tank" = 'CouncilWaterTank1')
+#
+#					:	How to add script to systemd to auto start when pi starts.
+#					:	https://www.dexterindustries.com/howto/run-a-program-on-your-raspberry-pi-at-startup/
+#
+#                   :   cp councilwatertank.service /lib/systemd/system
+#                   :   cp rainwatertank.service /lib/systemd/system
+#
+#                   :    sudo systemctl daemon-reload
+#
+#                   :    sudo systemctl enable councilwatertank.service
+#                   :    sudo systemctl enable rainwatertank.service
+#
+#                   :    sudo systemctl start councilwatertank.service
+#                   :    sudo systemctl start rainwatertank.service
+#
+#                   :    sudo systemctl status councilwatertank.service
+#                   :    sudo systemctl status rainwatertank.service
+#
 #######################################################################################################################
 
 __author__      = "George Leonard"
@@ -29,18 +49,52 @@ from pprint import pprint
 from influxdb import InfluxDBClient 
 from apputils import * 
 import paho.mqtt.client as mqtt
+import logging
 
 
 configfile      = os.getenv('CONFIGFILE')
 config_params   = get_config_params(configfile)
 
 DEBUGLEVEL  = int(config_params['common']['debuglevel'])
+LOGLEVEL    = config_params['common']['loglevel'].upper()
 TRIG        = int(config_params['ultrasonic']['trig'])
 ECHO        = int(config_params['ultrasonic']['echo'])
+LOGFILE     = config_params['common']['logfile'].lower()
 
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(TRIG ,GPIO.OUT)
 GPIO.setup(ECHO, GPIO.IN)
+
+# Set up root logger, and add a file handler to root logger
+#my_logger.basicConfig(filename='watertanklevel.log', filemode='w', format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
+
+FORMAT = '%(levelname)s :%(message)s'
+logging.basicConfig(filename=LOGFILE, 
+    filemode='w', 
+    encoding='utf-8',
+    level = logging.INFO,
+    format= FORMAT)
+
+# create logger
+my_logger = logging.getLogger(__name__)
+# create console handler and set level to debug
+my_logger_shandler = logging.StreamHandler()
+my_logger.addHandler(my_logger_shandler)
+
+print_params(configfile, my_logger)
+
+
+if LOGLEVEL == 'INFO':
+    my_logger.setLevel(logging.INFO)
+    my_logger.info('INFO LEVEL Activated')
+
+elif LOGLEVEL == 'DEBUG':
+    my_logger.setLevel(logging.DEBUG)
+    my_logger.info('DEBUG LEVEL Activated')
+
+elif LOGLEVEL == 'CRITICAL':
+    my_logger.setLevel(logging.CRITICAL)
+    my_logger.info('CRITICAL LEVEL Activated')
 
 
 ########################################################################################################################
@@ -52,26 +106,26 @@ GPIO.setup(ECHO, GPIO.IN)
 
 ############# Instantiate a connection to the InfluxDB ##################
 def db_influx_connect():
-    print("")
-    print("#####################################################################")
-    print("")
 
-    print('{time}, Creating connection to InfluxDB... '.format(
+    my_logger.info("")
+    my_logger.info("#####################################################################")
+    my_logger.info("")
+
+    my_logger.info('{time}, Creating connection to InfluxDB... '.format(
         time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         ))
 
-    print('{time}, Host     : {host} '.format(
+    my_logger.info('{time}, Host     : {host} '.format(
         time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         host = config_params['influxdb']['host']
-
         ))
 
-    print('{time}, Port     : {port}'.format(
+    my_logger.info('{time}, Port     : {port}'.format(
         time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         port = config_params['influxdb']['port']
         ))
 
-    print('{time}, Database : {database} '.format(
+    my_logger.info('{time}, Database : {database} '.format(
         time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         database = config_params['influxdb']['dbname']
         ))
@@ -81,24 +135,23 @@ def db_influx_connect():
         client = InfluxDBClient(host = config_params['influxdb']['host'], port = config_params['influxdb']['port'])
         client.switch_database(database = config_params['influxdb']['dbname'])
         
-        print('{time}, Connection to InfluxDB Succeeded... '.format(
+        my_logger.info('{time}, Connection to InfluxDB Succeeded... '.format(
             time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         ))
 
-        print("")
-        print("#####################################################################")
-        print("")
+        my_logger.info("")
+        my_logger.info("#####################################################################")
+        my_logger.info("")
 
     except Exception as err:
-
-        print('{time}, Connection to InfluxDB Failed... {err}'.format(
+        my_logger.error('{time}, Connection to InfluxDB Failed... {err}'.format(
             time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
             err=err
         ))
-    
-        print("")
-        print("#####################################################################")
-        print("")
+
+        my_logger.error("")
+        my_logger.error("#####################################################################")
+        my_logger.error("")
 
         sys.exit(-1)
 
@@ -111,13 +164,14 @@ def insertInflux(client, json_data):
     try:
 
         response = client.write_points(points=json_data)
-        print("Write operation & points: {response} {json_data}".format(
+        
+        my_logger.debug("{time}, InfluxDB Write operation: {response}".format(
+            time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
             response=response,
-            json_data=json_data,
-        ))       
+        ))   
 
     except Exception as err:
-        print('{time}, Write Failed !!!: {err}'.format(
+        my_logger.error('{time}, Write Failed !!!: {err}'.format(
             time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
             err    = err
         ))
@@ -138,31 +192,29 @@ def mqtt_connect():
     password    = config_params["mqtt"]["password"]
     base_topic  = config_params['mqtt']['base_topic']
 
-    print('{time}, Creating connection to MQTT... '.format(
+    my_logger.info('{time}, Creating connection to MQTT... '.format(
         time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         ))
 
-    print('{time}, Broker     : {broker} '.format(
+    my_logger.info('{time}, Broker     : {broker} '.format(
         time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         broker = broker
-
         ))
 
-    print('{time}, Port       : {port}'.format(
+    my_logger.info('{time}, Port       : {port}'.format(
         time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         port = port
         ))
 
-    print('{time}, Client Tag : {clienttag} '.format(
+    my_logger.info('{time}, Client Tag : {clienttag} '.format(
         time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         clienttag = clienttag
         ))
 
-    print('{time}, Base Topic : {base_topic} '.format(
+    my_logger.info('{time}, Base Topic : {base_topic} '.format(
         time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         base_topic = base_topic
         ))
-
         
     mqtt.Client.connected_flag      = False                     # this creates the flag in the class
     mqtt.Client.bad_connection_flag = False                     # this creates the flag in the class
@@ -181,29 +233,27 @@ def mqtt_connect():
     try:
         client.username_pw_set(username, password)
         client.connect(broker, port)                                          # connect
-        if DEBUGLEVEL > 1: 
-            print("{time}, Connected to to MQTT Broker: {broker}, Port: {port}".format(
-                time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
-                broker=broker,
-                port=port
-            ))
+        my_logger.info("{time}, Connected to to MQTT Broker: {broker}, Port: {port}".format(
+            time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
+            broker=broker,
+            port=port
+        ))
 
-        print("")
-        print("#####################################################################")
-        print("")
+        my_logger.info("")
+        my_logger.info("#####################################################################")
+        my_logger.info("")
 
     except Exception as err:
-        if DEBUGLEVEL > 1: 
-            print("{time}, Connection to MQTT Failed... {broker}, Port: {port}, Err: {err}".format(
-                time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
-                broker=broker,
-                port=port,
-                err=err
-            ))
-     
-        print("")
-        print("#####################################################################")
-        print("")
+        my_logger.error("{time}, Connection to MQTT Failed... {broker}, Port: {port}, Err: {err}".format(
+            time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
+            broker=broker,
+            port=port,
+            err=err
+        ))
+
+        my_logger.error("")
+        my_logger.error("#####################################################################")
+        my_logger.error("")
 
         #influx_client.close()
         GPIO.cleanup()
@@ -217,46 +267,69 @@ def on_connect(client, userdata, flags, rc):
 
     if rc == 0:
         client.connected_flag = True
-        if DEBUGLEVEL > 2: print("connected OK")
+
+        if DEBUGLEVEL > 2: 
+            my_logger.debug("MQTT connected OK")
 
     else:
-        if DEBUGLEVEL > 2: print("Bad connection Returned code=", rc)
+        my_logger.error("MQTT Bad connection Returned code=", rc)
+
         client.bad_connection_flag = True
 
 
 def on_log(client, userdata, level, buf):
 
-    if DEBUGLEVEL > 2: print("log : " + buf)
-
+    if DEBUGLEVEL > 2: 
+        my_logger.debug("log : " + buf)
 
 def on_message(client, userdata, message):
 
     topic = message.topic
     m_decode = str(message.payload.decode("utf-8"))
 
-    print('received message : {time}, {topic}, {payload}'.format(
-        time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
-        topic=topic,
-        payload=json.dumps(m_decode, indent=2, sort_keys=True)))
-
+    if DEBUGLEVEL > 2: 
+        my_logger.debug('received message : {time}, {topic}, {payload}'.format(
+            time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
+            topic=topic,
+            payload=json.dumps(m_decode, indent=2, sort_keys=True)))
 
 def on_publish(client, userdata, mid):
 
-    if DEBUGLEVEL > 2: print("In on_pub callback mid= ", mid)
-
+    if DEBUGLEVEL > 2: 
+        my_logger.debug("In on_pub callback mid= ", mid)
 
 def on_subscribe(client, userdata, mid, granted_qos):
 
-    if DEBUGLEVEL > 2: print("subscribed")
-
+    if DEBUGLEVEL > 2: 
+        my_logger.debug("subscribed")
 
 def on_disconnect(client, userdata, flags, rc=0):
 
-    if DEBUGLEVEL > 2: print("Disconnected flags result code " + str(rc)+" client_id")
+    if DEBUGLEVEL > 2: 
+        my_logger.debug("Disconnected flags result code " + str(rc)+" client_id")
 
     client.connected_flag = False
 
 
+def publishMQTT(client, json_data):
+
+    base_topic  = config_params["mqtt"]["base_topic"]
+
+    try:
+
+        ret = client.publish(base_topic + "/json", json.dumps(json_data), 0)           # QoS = 0
+        my_logger.debug("{time}, MQTT Publish returned: {ret}".format(
+            time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
+            ret=ret
+        ))    
+
+    except Exception as err:
+        my_logger.error('{time}, Publish Failed !!!: {err}'.format(
+            time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
+            err    = err
+        ))
+
+# end def
 
 ############# General calculations ##################
 
@@ -264,7 +337,7 @@ def on_disconnect(client, userdata, flags, rc=0):
 def distance():
 
     if DEBUGLEVEL > 2: 
-        print("{time}, Entering distance: ".format(
+        my_logger.debug("{time}, Entering distance: ".format(
             time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         ))
 
@@ -288,7 +361,7 @@ def distance():
     distance = round(pulse_time * speed, 2)
 
     if DEBUGLEVEL > 2: 
-        print("{time}, Exiting distance: ".format(
+        my_logger.debug("{time}, Exiting distance: ".format(
             time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         ))
 
@@ -300,7 +373,7 @@ def distance():
 def middistance():
 
     if DEBUGLEVEL > 2: 
-        print("{time}, Entering middistance: ".format(
+        my_logger.debug("{time}, Entering middistance: ".format(
             time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         ))
 
@@ -314,7 +387,7 @@ def middistance():
         runs.append(meassured_distance)
 
         if DEBUGLEVEL > 1:
-            print('{time}, pulse_time: {pulse_time}, distance: {distance} '.format(
+            my_logger.debug('{time}, pulse_time: {pulse_time}, distance: {distance} '.format(
                 time        = str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
                 pulse_time  = pulse_time,
                 distance    = meassured_distance
@@ -325,7 +398,7 @@ def middistance():
     middistance = statistics.median(runs)
 
     if DEBUGLEVEL > 2: 
-        print("{time}, Exiting middistance: ".format(
+        my_logger.debug("{time}, Exiting middistance: ".format(
             time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         ))
 
@@ -337,7 +410,7 @@ def middistance():
 def waterheight(dist_to_water):           #  
 
     if DEBUGLEVEL > 2: 
-        print("{time}, Entering waterheight: ".format(
+        my_logger.debug("{time}, Entering waterheight: ".format(
             time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         ))
 
@@ -345,7 +418,7 @@ def waterheight(dist_to_water):           #
     waterheight         = total_tank_deph - dist_to_water
 
     if DEBUGLEVEL > 2: 
-        print("{time}, Exiting waterheight: ".format(
+        my_logger.debug("{time}, Exiting waterheight: ".format(
             time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         ))
 
@@ -357,7 +430,7 @@ def waterheight(dist_to_water):           #
 def filledpercenatge(waterheight):               
 
     if DEBUGLEVEL > 2: 
-        print("{time}, Entering filledpercenatge: ".format(
+        my_logger.debug("{time}, Entering filledpercenatge: ".format(
             time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         ))
 
@@ -366,7 +439,7 @@ def filledpercenatge(waterheight):
     percentage          = waterheight / (total_tank_deph - buffer_distance)
 
     if DEBUGLEVEL > 2: 
-        print("{time}, Exiting filledpercenatge: ".format(
+        my_logger.debug("{time}, Exiting filledpercenatge: ".format(
             time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         ))
 
@@ -377,7 +450,7 @@ def filledpercenatge(waterheight):
 def watervolume(filledpercenatge):               
 
     if DEBUGLEVEL > 2: 
-        print("{time}, Entering watervolume: ".format(
+        my_logger.debug("{time}, Entering watervolume: ".format(
             time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         ))
 
@@ -385,7 +458,7 @@ def watervolume(filledpercenatge):
     watervolume     = tank_capacity * filledpercenatge
 
     if DEBUGLEVEL > 2: 
-        print("{time}, Exiting watervolume: ".format(
+        my_logger.debug("{time}, Exiting watervolume: ".format(
             time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         ))
 
@@ -396,7 +469,7 @@ def watervolume(filledpercenatge):
 def main():
 
     if DEBUGLEVEL > 2: 
-        print("{time}, Entering main(): ".format(
+        my_logger.debug("{time}, Entering main(): ".format(
             time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         ))
 
@@ -404,8 +477,6 @@ def main():
     tag             = config_params["common"]["tag"]
     sleep_seconds   = int(config_params["ultrasonic"]["sleep_seconds"])
     total_tank_deph = int(config_params["ultrasonic"]["total_tank_deph"])
-    base_topic      = config_params["mqtt"]["base_topic"]
-
     
     try: 
         # Create the InfluxDB connection
@@ -426,13 +497,13 @@ def main():
             tTimestamp  = time.strftime('%Y-%m-%dT%H:%M:%SZ',time.localtime(time.time()))       # timestamp for Influx, down to the second
           
             tWaterLevel = waterheight(distance)                                  # how many cm of water do we have                                           
-            tPercentage = filledpercenatge(tWaterLevel)                          # Percentage filled
+            tPercentage = filledpercenatge(tWaterLevel)                         # Percentage filled
             tVolume     = watervolume(tPercentage)                               # How many L do we have
             tDistance   = round( distance, 2)
 
             # select * from "Water-Tank-Levels"
             # select * from "Water-Tank-Levels" where tag ="Council-Tank-Left"
-            json_data = [{
+            json_data = {
                 "measurement" : measurement,        # select from "< >""
                     "tags": {                       # where tank = "< >"
                         "tank": tag
@@ -440,74 +511,72 @@ def main():
                     "time" : tTimestamp,
                     "fields": {
                         "water_level":      tWaterLevel,        # cm of water in tank
-                        "fill_percentage":  tPercentage,        # based on distance and tank depth, percentage full
+                        "fill_percentage":  100*tPercentage,    # based on distance and tank depth, percentage full
                         "water_volume":     tVolume,            # based on percentage and tank capacity
                         "distance":         tDistance,          # distance to water surface
                     }
                 }
-            ]
+            
 
-            if DEBUGLEVEL > 0:
-                print('{time}, Measurement: {measurement}, Tag: {tag}, H2O Level : {level} cm, Fill Percentage: {percentage}%, Liters in Tank {volume} L '.format(
-                    time        = tTimestamp,
-                    measurement = measurement,
-                    tag         = tag,
-                    level       = tWaterLevel,      # cm of water
-                    percentage  = tPercentage,      # tank fille percentage based on useable capacity
-                    volume      = tVolume           # water volume in tank
-                ))
-
-            if DEBUGLEVEL > 1:
-
-                print("")
-                json_formatted_str = json.dumps(json_data, indent=2)
-                print(json_formatted_str)
-        
+            my_logger.info('{time}, Measurement: {measurement}, Tag: {tag}, H2O Level : {level} cm, Fill Percentage: {percentage}%, Liters in Tank {volume} L '.format(
+                time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
+                measurement = measurement,
+                tag         = tag,
+                level       = tWaterLevel,          # cm of water
+                percentage  = 100*tPercentage,      # tank fille percentage based on useable capacity
+                volume      = tVolume               # water volume in tank
+            ))  
 
             ########################################################################
             # Insert into InfluxDB Database
 
-            insertInflux(influx_client, json_data)
+            insertInflux(influx_client, [json_data])
 
             # Publish MQTT
-            ret = client.publish(base_topic + "/json", json.dumps(json_data), 0)           # QoS = 0
-            if DEBUGLEVEL > 1:
-                print("{time}, MQTT publish returned: {ret}".format(
-                    time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
-                    ret=ret
-                ))
+            publishMQTT(client, json_data)
+
+            my_logger.debug("")
+            json_formatted_str = json.dumps(json_data, indent=2)
+            my_logger.info(json_formatted_str)                
 
             time.sleep(sleep_seconds)
 
-   # except Exception as err:
+    except Exception as err:
 
-#        print('{time}, Soemthing went wrong / Error... {err}'.format(
- #           time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
- #           err=err
- #       ))
+        my_logger.error('{time}, Soemthing went wrong / Error... {err}'.format(
+            time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
+            err=err
+        ))
   
     except KeyboardInterrupt:
         # Reset by pressing CTRL + C
 
-        print('{time}, Shutting Down Unexpectedly...'.format(
+        my_logger.error('{time}, Shutting Down Unexpectedly...'.format(
             time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
         ))
-        
+
         sys.stdout.flush()
         sys.exit(-1)
 
     finally:
 
-        print('{time}, Closing DB Connection... '.format(
+        my_logger.info('{time}, Closing InfluxDB Connection... '.format(
             time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         ))
         influx_client.close()
+        
+        my_logger.info('{time}, GPIO Cleanup... '.format(
+            time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
+        ))
         GPIO.cleanup()
 
         # Cleanup
+        my_logger.info('{time}, MQTT Disconnect... '.format(
+            time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
+        ))
         client.disconnect()  # disconnect
 
-        print('{time}, Goodbye... '.format(
+        my_logger.info('{time}, Goodbye... '.format(
             time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
         ))
 
@@ -516,10 +585,25 @@ def main():
 
 if __name__ == '__main__':
 
-    print("")
-    print('{time}, Starting... '.format(
+    my_logger.info("")
+    my_logger.info('{time}, Starting... '.format(
         time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
     ))
+
+    my_logger.info(' ')
+    my_logger.info(' ####################################### ')
+    my_logger.info(' #                                     # ')
+    my_logger.info(' #           Water Tank Level          # ')
+    my_logger.info(' #                                     # ')
+    my_logger.info(' #          by: George Leonard         # ')
+    my_logger.info(' #          georgelza@gmail.com        # ')
+    my_logger.info(' #                                     # ')
+    my_logger.info(' #       {time}    # '.format(
+        time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
+    ))
+    my_logger.info(' #                                     # ')
+    my_logger.info(' ####################################### ')
+    my_logger.info(' ')
 
     main()
 

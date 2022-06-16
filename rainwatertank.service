@@ -1,0 +1,12 @@
+[Unit]
+Description=My Water Tank Level Service (Rain)
+After=multi-user.target
+
+[Service]
+Type=idle
+User=pi
+Group=pi
+ExecStart=/home/pi/watertank/run1.bsh > 2>&1 > /home/pi/watertank/rain.log
+
+[Install]
+WantedBy=multi-user.target
