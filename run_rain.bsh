@@ -1,0 +1,5 @@
+#!/bin/bash
+
+export CONFIGFILE=rain_config.cfg
+
+python3 level.py

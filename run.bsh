@@ -1,5 +1,0 @@
-#!/bin/bash
-
-export CONFIGFILE=config.cfg
-
-python3 level.py
