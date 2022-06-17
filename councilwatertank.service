@@ -6,7 +6,7 @@ After=multi-user.target
 Type=idle
 User=pi
 Group=pi
-ExecStart=/home/pi/watertank/run.bsh > 2>&1 > /home/pi/watertank/council.log
+ExecStart=/home/pi/watertank/run_council.bsh > 2>&1 > /home/pi/watertank/council.log
 
 [Install]
 WantedBy=multi-user.target

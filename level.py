@@ -590,21 +590,6 @@ if __name__ == '__main__':
         time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
     ))
 
-    my_logger.info(' ')
-    my_logger.info(' ####################################### ')
-    my_logger.info(' #                                     # ')
-    my_logger.info(' #           Water Tank Level          # ')
-    my_logger.info(' #                                     # ')
-    my_logger.info(' #          by: George Leonard         # ')
-    my_logger.info(' #          georgelza@gmail.com        # ')
-    my_logger.info(' #                                     # ')
-    my_logger.info(' #       {time}    # '.format(
-        time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")),
-    ))
-    my_logger.info(' #                                     # ')
-    my_logger.info(' ####################################### ')
-    my_logger.info(' ')
-
     main()
 
 # end def

@@ -1,5 +1,5 @@
 #!/bin/bash
 
-export CONFIGFILE=council_config.cfg
+export CONFIGFILE=/home/pi/watertank/council_config.cfg
 
-python3 level.py
+python3 /home/pi/watertank/level.py

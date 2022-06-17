@@ -1,5 +1,5 @@
 #!/bin/bash
 
-export CONFIGFILE=rain_config.cfg
+export CONFIGFILE=/home/pi/watertank/rain_config.cfg
 
-python3 level.py
+python3 /home/pi/watertank/level.py
